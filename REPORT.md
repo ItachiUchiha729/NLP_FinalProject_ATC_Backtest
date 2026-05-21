@@ -1,7 +1,7 @@
 # ProntoNLP Earnings-Call ATC Signal Backtest
 ## LLM-Driven Quantitative Research — Final Project Report
 
-**Authors:** Chaithanya Pakala, Arshdeep Singh  
+**Author:** Chaithanya Pakala  
 **Dataset:** Earnings_ATC_until_2026-04-21.csv (2.74M rows, 609 columns, 2010–2026)  
 **Pipeline:** 8 sequential notebooks — one-command reproduction: `python run_all.py`
 
