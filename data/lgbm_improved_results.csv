@@ -1,0 +1,4 @@
+Universe,Improved LGBM (M+20d),Gross LGBM,Baseline ATC (M+20d)
+SP500,0.67,0.706,0.378
+SP1500,-0.123,-0.091,0.238
+RU3K proxy,0.54,0.575,1.177

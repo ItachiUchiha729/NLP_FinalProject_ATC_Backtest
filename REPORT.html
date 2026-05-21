@@ -1,19 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>ProntoNLP ATC Backtest — Chaithanya Pakala</title>
-<style>
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>ProntoNLP ATC Backtest — Chaithanya Pakala</title><style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
-  font-size: 12pt;
-  line-height: 1.65;
-  color: #1a1a1a;
-  width: 170mm;
-  margin: 0 auto;
-  padding: 10mm 0;
-}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif; font-size: 12pt; line-height: 1.65; color: #1a1a1a; width: 170mm; margin: 0 auto; padding: 10mm 0; }
 h1 { font-size: 1.8em; border-bottom: 3px solid #0366d6; padding-bottom: 10px; margin: 28px 0 14px; color: #0366d6; }
 h2 { font-size: 1.35em; border-bottom: 1px solid #d1d5da; padding-bottom: 5px; margin: 32px 0 10px; color: #24292e; }
 h3 { font-size: 1.1em; margin: 20px 0 7px; color: #444; }
@@ -30,26 +17,11 @@ th { background: #0366d6; color: white; font-weight: 600; text-align: left; padd
 td { padding: 6px 10px; border: 1px solid #d1d5da; vertical-align: top; }
 tr:nth-child(even) td { background: #f6f8fa; }
 hr { border: none; border-top: 2px solid #e1e4e8; margin: 28px 0; }
-figure {
-  margin: 16px 0;
-  text-align: center;
-  width: 100%;
-}
-figure img {
-  max-width: 95%;
-  max-height: 160mm;
-  width: auto;
-  height: auto;
-  border-radius: 5px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.15);
-  display: block;
-  margin: 0 auto;
-}
+figure { margin: 16px 0; text-align: center; width: 100%; }
+figure img { max-width: 95%; max-height: 160mm; width: auto; height: auto; border-radius: 5px; box-shadow: 0 1px 6px rgba(0,0,0,0.15); display: block; margin: 0 auto; }
 figcaption { font-size: 0.82em; color: #586069; margin-top: 5px; font-style: italic; }
 @page { margin: 18mm 20mm; size: A4; }
-</style>
-</head>
-<body>
+</style></head><body>
 <h1>ProntoNLP Earnings-Call ATC Signal Backtest</h1>
 <h2>LLM-Driven Quantitative Research — Final Project Report</h2>
 <p><strong>Author:</strong> Chaithanya Pakala   <strong>Dataset:</strong> Earnings_ATC_until_2026-04-21.csv (2.74M rows, 609 columns, 2010–2026)   <strong>Pipeline:</strong> 8 sequential notebooks — one-command reproduction: <code>python run_all.py</code></p>
@@ -57,7 +29,7 @@ figcaption { font-size: 0.82em; color: #586069; margin-top: 5px; font-style: ita
 <h2>Executive Summary</h2>
 <p>This report presents a full quantitative backtest of ProntoNLP's <strong>ATC (Aspect-Topic Classifier) earnings-call signal</strong> across three equity universes: S&P 500, S&P 1500, and a Russell 3000 proxy. The core finding is that the raw <strong>ATCClassifierScore</strong> is a persistent, economically meaningful signal that survives realistic transaction costs across all universes and time periods. Machine-learning overlays (LightGBM, XGBoost-DART) do not improve on the raw signal for large-cap universes due to high noise-to-signal ratio at short horizons — but the regime-aware XGBoost-DART modestly matches the baseline for SP1500 at monthly cadence.</p>
 <p><strong>Key results (net of 5 bps/side, corrected annualisation):</strong></p>
-<table><tr><th>Universe</th><th>Signal</th><th>Cadence</th><th>Net Sharpe</th><th>Annual TC</th></tr><tr><td>SP500</td><td>ATCClassifierScore</td><td>Weekly+5d</td><td><strong>0.678</strong></td><td>~520 bps</td></tr><tr><td>SP1500</td><td>ATCClassifierScore</td><td>Monthly+20d</td><td><strong>0.510</strong></td><td>~120 bps</td></tr><tr><td>RU3K proxy</td><td>ATCClassifierScore</td><td>Monthly+20d</td><td><strong>0.829</strong></td><td>~120 bps</td></tr><tr><td>SP500</td><td>LightGBM</td><td>Weekly+5d</td><td>−0.538</td><td>~520 bps</td></tr><tr><td>SP1500</td><td>Regime-XGB DART</td><td>Monthly+20d</td><td><strong>0.522</strong></td><td>~120 bps</td></tr></table>
+<table><tr><th>Universe</th><th>Signal</th><th>Cadence</th><th>Net Sharpe</th><th>Annual TC</th></tr><tr><td>SP500</td><td>ATCClassifierScore</td><td>Weekly+5d</td><td><strong>0.678</strong></td><td>~520 bps</td></tr><tr><td>SP1500</td><td>ATCClassifierScore</td><td>Monthly+20d</td><td><strong>0.510</strong></td><td>~120 bps</td></tr><tr><td>RU3K proxy</td><td>ATCClassifierScore</td><td>Monthly+20d</td><td><strong>0.829</strong></td><td>~120 bps</td></tr><tr><td>SP500</td><td>LightGBM</td><td>Weekly+5d</td><td>−0.538</td><td>~520 bps</td></tr><tr><td>SP500</td><td><strong>Improved LightGBM (NB09)</strong></td><td>Monthly+20d</td><td><strong>0.670</strong></td><td>~120 bps</td></tr><tr><td>SP1500</td><td>Regime-XGB DART</td><td>Monthly+20d</td><td><strong>0.522</strong></td><td>~120 bps</td></tr></table>
 <p>The placebo test (Fluff/Filler AspectTheme columns) produces L/S Sharpe ≈ 0, confirming no structural look-ahead bias in the pipeline.</p>
 <hr>
 <h2>1. Dataset and Signal Description</h2>
@@ -321,5 +293,25 @@ ATC_PROJECT_ROOT=$(pwd) jupyter nbconvert --execute notebooks/01_data_pipeline.i
 scikit-learn==1.x, yfinance==0.2.x, exchange_calendars==4.x
 wrds==3.x, psycopg2==2.x, pyarrow==14.x
 </code></pre>
-</body>
-</html>
+<hr>
+<h2>18. NB09 — Improved LightGBM: Three Targeted Fixes</h2>
+<p>After diagnosing the root causes of NB05's failure (§7.2), we built a new model with three surgical changes. The results validate the diagnosis.</p>
+<h3>18.1 Changes vs NB05</h3>
+<table><tr><th></th><th>NB05 (Original)</th><th>NB09 (Improved)</th></tr><tr><td><strong>Target</strong></td><td>Raw fwd_5d return</td><td>Cross-sectional rank of fwd_20d</td></tr><tr><td><strong>Training window</strong></td><td>Expanding from 2010</td><td>Rolling 3 years</td></tr><tr><td><strong>Rebalance</strong></td><td>Weekly (520 bps TC)</td><td>Monthly (120 bps TC)</td></tr><tr><td><strong>Features</strong></td><td>Top-50 by single-period MI</td><td>Top-20 by IC stability score</td></tr><tr><td><strong>Refits</strong></td><td>24 quarterly</td><td>6 annual (4× faster)</td></tr></table>
+<h3>18.2 Results (Test Period 2020–2025)</h3>
+<table><tr><th>Universe</th><th>NB05 Net Sharpe</th><th>NB09 Net Sharpe</th><th>Baseline ATC</th></tr><tr><td>SP500</td><td>−0.538</td><td><strong>+0.670</strong></td><td>0.378</td></tr><tr><td>SP1500</td><td>−0.243</td><td>−0.123</td><td>0.238</td></tr><tr><td>RU3K proxy</td><td>+0.106</td><td>+0.540</td><td>1.177</td></tr></table>
+<p><strong>SP500: +1.21 Sharpe improvement</strong> over NB05. The improved model beats the raw signal in the test period (0.670 vs 0.378).</p>
+<p>Year-by-year IC for SP500 shows why:</p>
+<table><tr><th>Year</th><th>NB09 LGBM IC</th><th>Baseline ATC IC</th></tr><tr><td>2020</td><td>−0.012</td><td>−0.095</td></tr><tr><td>2021</td><td><strong>+0.068</strong></td><td>−0.019</td></tr><tr><td>2022</td><td><strong>+0.054</strong></td><td>+0.038</td></tr><tr><td>2023</td><td>+0.020</td><td>+0.040</td></tr><tr><td>2024</td><td><strong>+0.075</strong></td><td>+0.035</td></tr><tr><td>2025</td><td>−0.006</td><td>−0.046</td></tr></table>
+<p>The rolling window allows the model to find non-linear combinations of qoq_acceleration, mwns_FinancialPerformance, and atc_cfo that produce positive IC even in years where the raw ATCClassifierScore failed (2021).</p>
+<h3>18.3 Why SP1500 and RU3K Don't Improve</h3>
+<p>SP1500 (mid/small caps) still negative: mid-cap return dynamics differ from large-cap. The model trained primarily on large-cap patterns (which dominate the SP1500 training sample by event count) does not transfer to SP400/SP600 names. A separate model per tier would likely help.</p>
+<p>RU3K proxy (0.540) is 4× better than NB05 but still below the raw signal baseline (1.177). For small caps, the ATC signal's direct sentiment score is hard to beat with ML overlays — the market is less efficient, and the raw signal already captures most of the alpha.</p>
+<h3>18.4 Top Features (NB09)</h3>
+<p>Most important features (LightGBM gain): 1. <code>mwns_CurrentState_FinancialPerformance</code> — current financial health surprise 2. <code>atc_answer</code> — executive answer sentiment (vs question) 3. <code>qoq_acceleration</code> — second derivative of ATC trend 4. <code>atc_cfo</code> — CFO-specific sentiment (more informative than CEO) 5. <code>qoq_delta</code> — quarter-over-quarter sentiment change</p>
+<p>Notably, raw <code>ATCClassifierScore</code> drops from being the dominant feature (NB05) to 3rd-best. The model discovers that CFO language (<code>atc_cfo</code>) and financial performance commentary (<code>mwns_CurrentState_FinancialPerformance</code>) are more stable predictors of 20-day returns.</p>
+<figure><img src="file:///Users/chaithanyapakala/Downloads/NLP_FinalProject/figures/lgbm_improved_equity.png" alt="Improved LightGBM Equity Curves"><figcaption><em>Improved LightGBM Equity Curves</em></figcaption></figure>
+<em>Figure 19: Improved LightGBM vs Baseline ATCClassifierScore, test period 2020–2025.</em>
+<figure><img src="file:///Users/chaithanyapakala/Downloads/NLP_FinalProject/figures/lgbm_improved_feature_importance.png" alt="Improved LightGBM Feature Importance"><figcaption><em>Improved LightGBM Feature Importance</em></figcaption></figure>
+<em>Figure 20: Feature importance for improved LightGBM — CFO language and financial performance dominate.</em>
+</body></html>
