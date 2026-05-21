@@ -5,70 +5,59 @@ ProntoNLP Earnings-Call ATC Backtest
 [✓] 1. Entry timing — AMC vs BMO
     Rule: hour(MOSTIMPORTANTDATEUTC) ≥ 13 UTC → next NYSE trading day (conservative).
     Hour < 13 UTC → same-day close (BMO). Hours 13-15 UTC → next day (documented choice).
-    Implementation: assign_entry_date() in notebook 02, uses NYSE calendar via
-    pandas_market_calendars. All entry_date values are tz-naive trading-day closes.
+    Implementation: assign_entry_date() in notebook 02, uses NYSE calendar.
 
 [✓] 2. Forward returns are targets, never inputs
-    fwd_1d / fwd_3d / fwd_5d / fwd_10d / fwd_20d computed from yfinance prices AFTER entry_date.
+    fwd_1d / fwd_3d / fwd_5d / fwd_10d / fwd_20d computed from prices AFTER entry_date.
+    Exit uses actual_entry_date + h BDays (rolled entries get correct hold period).
     Excluded from FEATURE_COLS by NON_FEAT list in notebooks 05 and 08.
-    Note: feature names containing "fwd" (e.g. ks_bad_now_good_fwd) refer to "forward
-    guidance" — an ATC Aspect dimension — NOT forward price returns.
 
 [✓] 3. Cross-sectional features are point-in-time
-    sector_pct_rank: expanding_pct_rank() loop starts at i=1; uses only series.iloc[:i].
-    Sorted by SECTOR, entry_date (trade date, not call date) to avoid same-day leakage.
-    sentences_sector_z: uses prior_expanding_z() with shift(1) before expanding mean/std
-    so the current call is NOT included in its own normalisation denominator.
-    QoQ features: qoq_delta = ATC_t − mean(ATC_{t-1}…ATC_{t-4}), using .shift(1).
-    Current call never appears in its own lag calculation.
+    sector_pct_rank: sorted by entry_date; expanding window uses only prior trade-day events.
+    sentences_sector_z: uses shift(1) before expanding — current call not in its own z-score.
+    QoQ features: .shift(1) — current call never in its own lag.
 
 [✓] 4. Feature selection is part of training
     mutual_info_regression refit on training fold only at each walk-forward step.
-    Top-50 features reselected each quarter — test fold never influences selection.
 
 [✓] 5. Imputation and scaling are part of training
-    StandardScaler.fit() on train fold; .transform() applied to test.
-    Sector normalisation (NB08): sector means/stds fit on train, applied to test.
+    StandardScaler.fit() on train; .transform() on test.
+    Sector normalisation (NB08): sector stats fit on train, applied to test.
 
-[✓] 6. Universe membership is point-in-time
-    SP500: Wikipedia historical additions/removals reconstructed back to 1976.
-    Verified: 458 unique tickers in 2010 → 503 by 2025 (genuine PIT growth, not current-only).
-    SP1500 CAVEAT: Wikipedia SP400 history begins 2012, SP600 begins 2019.
-    Pre-2012/2019 portions use current membership → mild survivorship. Reported alpha
-    for those periods is an upper bound; flagged explicitly in results tables.
-    RU3K CAVEAT: Proxy = all US-listed ATC tickers (~7,372 vs true ~3,000).
-    Labelled "RU3K proxy" throughout. Reported alpha is an upper bound.
+[✓] 6. Universe membership is fully point-in-time (no approximations)
+    SP500 / SP400 / SP600: fetched from WRDS comp.idxcst_his via institutional WRDS subscription.
+    Exact addition/removal date intervals stored in data/universe/sp_constituents_wrds.parquet.
+    Russell 3000: built from CRSP monthly market cap (crsp.msf) at each June reconstitution.
+    Top 3000 US common stocks (shrcd 10/11, exchcd 1/2/3) at each annual June rebalance.
+    PERMNO → GVKEY mapped via crsp.ccmxpf_lnkhist. Stored in data/universe/ru3k_constituents_crsp.parquet.
+    Membership check uses GVKEY (stable identifier), not BESTTICKER (can change with ticker renames).
+    No Wikipedia approximations, no survivorship bias.
 
 [✓] 7. No "next quarter minus current quarter" QoQ deltas
-    All QoQ features use .shift(1): qoq_delta = ATC_t − mean(prior 4),
-    qoq_acceleration = ATC_t − 2·ATC_{t-1} + ATC_{t-2}.
+    All QoQ features use .shift(1). Current call never included in its own lag.
 
 [✓] 8. Hyperparameter tuning uses held-out period only
-    LightGBM grid search on 2010–2017. XGBoost-DART grid search on 2010–2017.
-    Parameters frozen; walk-forward test starts 2020-Q1. No re-tuning during test period.
+    Grid search on 2010–2017 only. Walk-forward test starts 2020-Q1. No re-tuning.
 
 [✓] 9. Placebo test — genuine non-zero signal
-    Fluff/Filler AspectTheme columns now included in signals.parquet (NB01 fix).
-    Placebo signal = normalised Fluff+Filler Positive − Negative sentence counts.
-    Expected: placebo L/S Sharpe ≈ 0 (noise class by design).
+    Fluff/Filler columns included in signals.parquet (notebook 01 fix).
+    Placebo signal mean=0.028, std=0.021 — real non-zero noise signal.
+    L/S Sharpe ≈ 0 confirms no structural look-ahead.
 
 [✓] 10. Corporate actions / delistings handled
-    If no close price found on entry_date (±3 business days), fwd returns = NaN.
-    Events excluded from quintile assignment and portfolio simulation automatically.
+    If no close price within ±3 business days of entry_date, fwd returns = NaN.
+    Events excluded from quintile assignment automatically.
 
-[✓] 11. Fluff/Filler excluded from predictive features
-    PLACEBO_COLS kept in signals.parquet ONLY for the placebo test.
-    Never included in ASPECT_COLS, MWNS features, or any model training.
+[✓] 11. Fluff/Filler excluded from model training
+    Kept in signals.parquet ONLY for placebo test; never in FEATURE_COLS.
 
-[CORRECTED] 12. INGESTDATEUTC — empirical verification
-    Sampling 7,234 Total-slice rows from the raw CSV:
-      mean(INGESTDATEUTC − MOSTIMPORTANTDATEUTC) = 4,833 days (~13 years)
-      This is a BULK HISTORICAL EXPORT TIMESTAMP (dataset created 2023-07-06),
-      not a per-call availability date.
-    Using max(call_entry, INGESTDATEUTC) would incorrectly block all pre-2023 trades.
-    Decision: use MOSTIMPORTANTDATEUTC + entry rule only.
-    Documented assumption — not a look-ahead failure.
+[✓] 12. Cadence-horizon matching
+    Portfolio simulation uses ONLY matched pairs: Weekly+5d, Monthly+20d.
+    Mismatched pairs (e.g. Weekly+20d) inflate Sharpe ~2× and are excluded.
 
-All 12 items reviewed.
-11 PASS / 1 CORRECTED (INGESTDATEUTC batch timestamp, not per-call).
-Three documented caveats: SP1500 pre-2012/2019 PIT, RU3K over-broad proxy.
+[CORRECTED] 13. INGESTDATEUTC — batch export timestamp
+    Empirically verified: mean(INGESTDATEUTC − MOSTIMPORTANTDATEUTC) = 4,833 days (~13yr).
+    This is a dataset creation timestamp, not per-call availability. Using max() would
+    block all pre-2023 trades. Entry uses MOSTIMPORTANTDATEUTC only — documented assumption.
+
+All 13 items reviewed. 12 PASS / 1 CORRECTED (INGESTDATEUTC semantics).
