@@ -1,0 +1,70 @@
+LOOK-AHEAD BIAS AUDIT CHECKLIST
+ProntoNLP Earnings-Call ATC Backtest
+=====================================
+
+[✓] 1. Entry timing — AMC vs BMO
+    Rule: hour(MOSTIMPORTANTDATEUTC) ≥ 13 UTC → next NYSE trading day (conservative).
+    Hour < 13 UTC → same-day close (BMO).
+    Hours 13-15 UTC → treated as AMC (conservative choice, documented).
+    Implementation: assign_entry_date() in notebook 02, uses NYSE calendar via
+    pandas_market_calendars. Entry dates are always tz-naive trading day closes.
+
+[✓] 2. Forward returns are targets, never inputs
+    fwd_1d / fwd_3d / fwd_5d / fwd_10d / fwd_20d computed from prices AFTER entry_date.
+    Excluded from FEATURE_COLS by name in NON_FEAT list in notebooks 05 and 08.
+    Note: feature names containing "fwd" (e.g. ks_bad_now_good_fwd) refer to
+    "forward guidance" (an ATC Aspect dimension), NOT forward price returns.
+
+[✓] 3. Cross-sectional features are point-in-time
+    sector_pct_rank uses expanding_pct_rank() — loop starts at i=1, uses only
+    series.iloc[:i] (strictly prior observations). Requires min 10 prior events.
+    QoQ features use .shift(1): qoq_delta = ATC_t - mean(ATC_{t-1}...ATC_{t-4}).
+    Current call never appears in its own lag calculation.
+
+[✓] 4. Feature selection is part of training
+    mutual_info_regression refit on training fold only at each walk-forward step.
+    Top-50 features reselected each quarter — test fold never influences selection.
+
+[✓] 5. Imputation and scaling are part of training
+    StandardScaler.fit() on train fold; .transform() applied to test.
+    Sector normalization (notebook 08): sector means/stds fit on train, applied to test.
+
+[✓] 6. Universe membership is point-in-time
+    SP500: Wikipedia historical additions/removals reconstructed back to 1976.
+    Verified: 458 unique tickers in 2010 → 503 by 2025 (genuine PIT growth pattern).
+    SP1500 CAVEAT: SP400 history from Wikipedia begins 2012, SP600 begins 2019.
+    Pre-2012/2019 portions use current members → mild survivorship bias for early years.
+    Reported SP1500 alpha for 2010-2012 is an upper bound; document in write-up.
+    RU3K CAVEAT: Proxy uses all US-listed ATC tickers (~7,372 vs true ~3,000).
+    Reported RU3K alpha is an upper bound; document in write-up.
+
+[✓] 7. No "next quarter minus current quarter" QoQ deltas
+    qoq_delta = ATC_t - mean(ATC_{t-1:t-4}), shift(1) verified on sample tickers.
+    qoq_acceleration = ATC_t - 2×ATC_{t-1} + ATC_{t-2}, all properly lagged.
+
+[✓] 8. Hyperparameter tuning uses held-out period only
+    Grid search run on 2010–2017. Parameters frozen before any 2018+ data is seen.
+    Walk-forward test starts 2020-Q1. No re-tuning during test period.
+
+[✓] 9. Placebo test passes
+    Signal built from Fluff/Filler-only AspectTheme columns dropped in notebook 01.
+    Placebo portfolio produces L/S Sharpe ≈ 0 (verified in notebook 04).
+
+[✓] 10. Corporate actions / delistings handled
+    If no close price found on entry_date (or within +3 business days), fwd returns
+    are NaN → event excluded from quintile assignment and portfolio simulation.
+
+[✓] 11. Fluff/Filler excluded from predictive features
+    PLACEBO_COLS (Fluff/Filler) excluded from ASPECT_COLS at parse time in notebook 01.
+    Never fed into MWNS features or model training.
+
+[CORRECTED] 12. INGESTDATEUTC — dataset context matters
+    INGESTDATEUTC in this CSV is a BATCH PROCESSING TIMESTAMP (2023-07-06 for all
+    historical records 2010-2022), not a per-call availability date. Using
+    max(MOSTIMPORTANTDATEUTC, INGESTDATEUTC) would incorrectly block all pre-2023 trades.
+    Correct rule: use MOSTIMPORTANTDATEUTC only for entry timing.
+    The "ingest lag" concern from the handout applies to datasets where individual calls
+    are ingested incrementally; this CSV was generated as a single historical export.
+
+All 12 items reviewed. 11 PASS, 1 CORRECTED (INGESTDATEUTC semantics).
+Three documented caveats: SP1500 pre-2012/2019 PIT, RU3K over-broad proxy, INGESTDATEUTC batch timestamp.

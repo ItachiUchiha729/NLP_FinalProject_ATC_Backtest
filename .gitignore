@@ -1,0 +1,16 @@
+# Large data files — too big for GitHub
+data/signals.parquet
+data/signals_with_returns.parquet
+data/features.parquet
+data/placebo_features.parquet
+data/model_predictions.parquet
+data/regime_model_predictions.parquet
+data/prices/
+data/universe/mcap_at_recon.parquet
+Earnings_ATC_until_2026-04-21.csv
+
+# Build artifacts
+notebooks/build_notebook_08.py
+__pycache__/
+*.pyc
+.DS_Store
