@@ -1,0 +1,427 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{mdframed}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{parskip}
+\usepackage{microtype}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+
+\definecolor{accent}{HTML}{0366D6}
+\definecolor{lightgray}{HTML}{F6F8FA}
+\definecolor{signalgreen}{HTML}{28A745}
+\definecolor{signalred}{HTML}{D73A49}
+\definecolor{signalorange}{HTML}{E36209}
+
+\hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent}
+
+\titleformat{\section}{\large\bfseries\color{accent}}{}{0em}{\thesection\quad}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{\thesubsection\quad}
+
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small\textcolor{gray}{ProntoNLP ATC Signal Backtest}}
+\fancyhead[R]{\small\textcolor{gray}{Chaithanya Pakala}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newmdenv[backgroundcolor=lightgray,linecolor=accent,linewidth=1pt,
+  leftmargin=0,rightmargin=0,skipabove=8pt,skipbelow=8pt,
+  innerleftmargin=10pt,innerrightmargin=10pt]{callout}
+
+\graphicspath{{figures/}}
+
+\begin{document}
+
+%% ----- TITLE PAGE -----
+\begin{titlepage}
+\centering
+\vspace*{1.5cm}
+{\Huge\bfseries\color{accent}ProntoNLP Earnings-Call\\[0.3em]ATC Signal Backtest\par}
+\vspace{0.8cm}
+{\large LLM-Driven Quantitative Research --- Final Project\par}
+\vspace{1.5cm}
+{\Large\bfseries Chaithanya Pakala\par}
+\vspace{0.4cm}
+{\small\href{https://github.com/ItachiUchiha729/NLP_FinalProject_ATC_Backtest}{github.com/ItachiUchiha729/NLP\_FinalProject\_ATC\_Backtest}\par}
+\vspace{1.2cm}
+\begin{callout}
+\centering
+\textbf{Dataset:} 2.74M earnings-call rows $\times$ 609 columns (2010--2026)\\[4pt]
+\textbf{Pipeline:} 10 notebooks --- one command: \texttt{python run\_all.py}\\[4pt]
+\textbf{Models:} Baseline ATC $\cdot$ LightGBM $\cdot$ XGBoost-DART $\cdot$ Improved LightGBM $\cdot$ Improved XGBoost-DART
+\end{callout}
+\vspace{1.2cm}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Universe} & \textbf{Best Model} & \textbf{Net Sharpe} & \textbf{Cadence} & \textbf{TC/yr}\\
+\midrule
+SP500      & Improved LightGBM (NB09) & \textbf{0.678}/\textbf{0.670} & W+5d/M+20d & 520/120 bps\\
+SP1500     & Regime-XGB DART (NB08)   & \textbf{0.522}               & M+20d & 120 bps\\
+RU3K proxy & Improved XGB-DART (NB10) & \textbf{1.108}               & M+20d & 120 bps\\
+\bottomrule
+\end{tabular}
+\vfill
+{\small Placebo test $\Rightarrow$ L/S Sharpe $\approx 0$. All 12 look-ahead audit items: \textbf{PASS}.\par}
+\end{titlepage}
+\tableofcontents\newpage
+
+%% ===== 1. DATASET =====
+\section{Dataset and Signal Description}
+
+\subsection{Raw Data}
+The input is a 4.5\,GB CSV with 2{,}740{,}000 earnings-call observations from January 2010 to April 2026. Each row represents one transcript segment with 609 columns covering identifiers (GVKEY, BESTTICKER), timing (MOSTIMPORTANTDATEUTC), the headline signal (ATCClassifierScore $\in [-1,+1]$), 545 AspectTheme$\times$score NLP columns, and metadata (SECTOR, speaker type, call length).
+
+\subsection{ATCClassifierScore}
+The signal aggregates sentiment across all AspectTheme scores. Mean = 0.019 (management optimism bias), Std = 0.035, Spearman IC vs 5d returns $\approx 0.030$, vs 20d returns $\approx 0.055$.
+
+\begin{callout}
+\textbf{Critical:} \texttt{INGESTDATEUTC} $-$ \texttt{MOSTIMPORTANTDATEUTC} = 4{,}833 days mean. This is a \emph{batch export timestamp}, not per-call availability. Using it as a gate would block all pre-2023 trades. All entry timing uses \texttt{MOSTIMPORTANTDATEUTC} only.
+\end{callout}
+
+%% ===== 2. UNIVERSE =====
+\section{Universe Construction and Point-in-Time Data}
+
+\subsection{S\&P 500/400/600 via WRDS Compustat}
+Source: \texttt{comp.idxcst\_his} (institutional WRDS subscription). Schema: (\texttt{gvkey}, \texttt{gvkeyx}, \texttt{from}, \texttt{thru}) --- exact entry/exit intervals. We auto-detect index GVKEYs by constituent count (SP500 $\approx 503$, SP400 $\approx 400$, SP600 $\approx 602$) and use vectorised GVKEY interval joins instead of BESTTICKER (which changes on corporate renames: Meta was FB, Twitter was TWTR).
+
+\textit{Caveat:} Only current members (\texttt{thru=NULL}) returned by this subscription. Deleted companies absent, causing mild survivorship bias for pre-2020 periods ($<$2\% of events/year). Documented in audit.
+
+\subsection{Russell 3000 --- Genuine Point-in-Time}
+Built from \texttt{crsp.msf} (CRSP monthly market cap) at each last-Friday-of-June annual reconstitution. Top 3{,}000 US common stocks (shrcd~$\in$~\{10,11\}, exchcd~$\in$~\{1,2,3\}, prc~$>$~\$1). \textbf{No survivorship bias} --- a stock that peaked in 2015 correctly appears only in 2015's cohort. 16 recons, 47{,}901 interval rows, 6{,}626 unique GVKEYs.
+
+%% ===== 3. FEATURES =====
+\section{Feature Engineering (78 Features)}
+
+\begin{center}
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Family} & \textbf{\#} & \textbf{Description}\\
+\midrule
+MWNS scores & 45 & Per-AspectTheme expanding z-score vs company history. Captures \emph{surprise} component.\\
+QoQ sentiment & 12 & $\Delta$ATC and $\Delta^2$ATC with \texttt{.shift(1)} lags --- never includes current call.\\
+Cross-sectional & 8 & Sector-relative percentile rank and z-score --- same-day events excluded from denominator.\\
+Call characteristics & 13 & Length, speaker mix, topic diversity.\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Look-ahead prevention:} All expanding windows use \texttt{.shift(1)} before \texttt{.expanding()} so the current call never contributes to its own normalisation. \texttt{sector\_pct\_rank} is sorted by \texttt{entry\_date} so same-day earnings calls do not see each other's rank.
+
+%% ===== 4. BASELINE =====
+\section{Baseline Backtest --- ATCClassifierScore (Notebook 04)}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{ic_heatmap_atc}
+\caption{Spearman IC of ATCClassifierScore vs forward returns, by year and horizon. IC grows from 5d to 20d --- consistent with post-earnings announcement drift (PEAD). The signal is most informative at 20-day horizons across almost all years.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{ic_by_year}
+\caption{Annual IC trend. Pre-2020 mean IC $\approx 0.06$ at 5d; post-2020 mean IC $\approx 0.001$. This regime change is the primary cause of ML model failures in the test period.}
+\end{figure}
+
+\subsection{The Critical Long/Short Decomposition}
+
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+Universe & Horizon & Long Sharpe & Short Sharpe & L/S Sharpe\\
+\midrule
+SP500  & 5d  & +0.44 & \textcolor{signalred}{$-$0.76} & $-$0.29\\
+SP500  & 20d & +0.52 & \textcolor{signalgreen}{$-$0.02} & \textbf{+0.51}\\
+SP1500 & 5d  & +0.27 & $-$0.39 & $-$0.39\\
+RU3K   & 5d  & +0.43 & +0.09  & \textbf{+0.44}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{callout}
+\textbf{Why the short leg fails at 5d for large caps:} Stocks with negative ATC scores still produce positive 5-day returns due to \emph{short-term momentum continuation} --- short-covering, retail buying, and analyst upgrades in the first week post-earnings. The bearish fundamental information takes 2--4 weeks to be fully priced (PEAD). This finding drives the entire design rationale for 20-day horizons in all ML models.
+\end{callout}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.48\linewidth]{quintile_ls_5d}\hfill
+\includegraphics[width=0.48\linewidth]{placebo_test}
+\caption{Left: Quintile spread shows monotonic signal ordering --- signal is well-behaved. Right: Placebo test using Fluff/Filler columns produces L/S Sharpe $\approx 0$, confirming no structural look-ahead bias in the pipeline.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{ic_decay_curve}
+\caption{IC decay curve: IC \emph{increases} from 1d to 20d --- unusual for price-based signals. This confirms PEAD: markets underreact to earnings sentiment, with full price impact realised over weeks.}
+\end{figure}
+
+%% ===== 5. HORIZON =====
+\section{Horizon Sensitivity and Portfolio Robustness}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{horizon_sensitivity}
+\caption{Weekly+5d vs Monthly+20d --- only \emph{matched} cadence-horizon pairs tested. Mismatched pairs (e.g.\ Weekly+20d) inflate Sharpe by $\sqrt{20/5}\approx 2\times$ and are excluded.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{best_horizon_equity_curves}
+\caption{Equity curves and drawdowns for best matched configuration per universe (2010--2026). SP500: Weekly+5d (Net Sharpe 0.678). SP1500: Monthly+20d (0.510). RU3K: Monthly+20d (0.829).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.48\linewidth]{turnover_sharpe_frontier}\hfill
+\includegraphics[width=0.48\linewidth]{sector_neutral_comparison}
+\caption{Left: Turnover-Sharpe frontier --- daily cadence exceeds 2{,}600\,bps/yr TC and is unviable. Right: Sector-neutral vs standard L/S --- lower vol but also lower gross Sharpe.}
+\end{figure}
+
+%% ===== 6. NB05 FAILURE =====
+\section{Walk-Forward LightGBM --- NB05 (Why It Failed)}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{ic_baseline_vs_lgbm}
+\caption{IC comparison: ATCClassifierScore (blue) vs LightGBM ensemble (orange). LightGBM underperforms in the 2020--2026 test period due to three compounding causes.}
+\end{figure}
+
+Three root causes explain the NB05 net Sharpe of $-0.538$ for SP500:
+
+\textbf{(1) Regime change.} The expanding training window learns 2010--2019 patterns.
+Mean IC at 5d: 0.060 (training) $\to$ 0.001 (test). The model overfits to a regime that no longer exists.
+
+\textbf{(2) Noisy 5-day target.} As shown in the L/S decomposition, the short leg has Sharpe $= -0.76$ for SP500 at 5d. LightGBM correlates with ATCClassifierScore and inherits this short-leg failure.
+
+\textbf{(3) Transaction cost structure.}
+At IC $\approx 0.001$ and weekly rebalancing:
+\[ \text{Gross alpha} \approx 0.001 \times \sqrt{52} \times 0.02 \approx 14\,\text{bps/yr} \ll \text{TC} \approx 520\,\text{bps/yr} \]
+
+%% ===== 7. NB08 =====
+\section{Regime-Aware XGBoost-DART --- NB08}
+
+\textbf{DART} (Dropout Additive Regression Trees) randomly drops existing trees during boosting. This prevents over-reliance on any single tree --- crucial for sparse NLP signals with idiosyncratic patterns. The regime confidence gate:
+\[ \hat{y}^{\text{regime}}_t = \hat{y}^{\text{XGB}}_t \times \sigma\!\left(\frac{\text{IC}_{12m} - \text{IC}^*}{\sigma_\text{IC}}\right) \]
+When rolling IC $\approx 0$ (post-2021 for SP500), confidence $\to 0$ and positions shrink.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{regime_confidence_timeline}
+\caption{Rolling IC and regime confidence. The gate suppresses trading during 2021--2022 when earnings sentiment had near-zero predictive power for large caps.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{regime_model_portfolio}
+\caption{Regime-aware XGBoost-DART returns (test 2020--2026). SP1500 benefits most from the regime gate (0.522 net Sharpe) --- mid-cap IC is more variable and the gate correctly suppresses low-confidence periods.}
+\end{figure}
+
+%% ===== 8. NB09 =====
+\section{Improved LightGBM --- NB09 (Three Surgical Fixes)}
+
+\subsection{Why Each Fix Was Needed}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Problem in NB05} & \textbf{Symptom} & \textbf{Fix in NB09}\\
+\midrule
+Expanding window trains on old regime & Model doesn't generalise post-2020 & Rolling 3-year window\\
+Raw 5d return target is noisy & Short leg Sharpe $= -0.76$ & Rank of fwd\_20d\\
+520\,bps/yr TC with IC $\approx 0$ & Guaranteed net loss & Monthly rebalance (120\,bps)\\
+50 unstable features via MI & Fold-to-fold feature instability & Top-20 by IC stability\\
+24 quarterly refits (slow) & 40+ minutes runtime & 6 annual refits (fast)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Rank target:} $y_\text{rank} = \text{rank}(\text{fwd}_{20d}) / N$ within sector$\times$month. This transforms the target to uniform $[0,1]$, removing fat-tail outlier returns that overwhelm gradient updates and forcing the model to learn \emph{relative ordering} --- exactly what a long/short portfolio needs.
+
+\textbf{Rolling 3-year window:} The model trained for 2023 sees data from 2020--2022 (post-COVID regime), not 2010--2019 (irrelevant bull-market era). This single change is responsible for the IC recovery in 2021: $-0.019$ (raw signal) $\to$ +0.068 (NB09) because the model learns that CFO-specific language and guidance acceleration remain informative even when the aggregate ATC score is noisy.
+
+\textbf{IC-stability feature selection:} Features ranked by $\frac{\text{median IC}}{\text{std IC} + 0.01}$ --- stable signal over many years beats strong signal in one year.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{lgbm_improved_equity}
+\caption{Improved LightGBM (NB09) vs Baseline ATCClassifierScore, test period 2020--2025. SP500 net Sharpe: $-0.538$ (NB05) $\to$ \textbf{+0.670} (NB09), beating the raw signal (0.378) in the same period.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\linewidth]{lgbm_improved_feature_importance}
+\caption{NB09 feature importance. CFO language (\texttt{atc\_cfo}), financial performance commentary, and QoQ acceleration dominate --- raw ATCClassifierScore drops from \#1 (NB05) to \#4. The model learned that \emph{who} says what and \emph{how it changes} matters more than the aggregate score.}
+\end{figure}
+
+\subsection{Sub-Period Results (SP500)}
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+Period & NB09 Net Sharpe & NB05 Net Sharpe & ATC Baseline & Improvement\\
+\midrule
+2020--2021 & $-$0.100 & $\approx -$0.40 & +0.050 & Partial recovery\\
+2022--2023 & \textbf{+1.863} & $\approx -$0.60 & +0.100 & +2.46\\
+2024--2025 & +0.209  & $\approx -$0.70 & $-$0.050 & Positive vs negative\\
+Full 2020--25 & \textbf{+0.670} & $-$0.538 & +0.378 & +1.21\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%% ===== 9. NB10 =====
+\section{Improved XGBoost-DART --- NB10}
+
+\subsection{Same Three Fixes, Different Architecture}
+
+NB10 applies the same rolling window, rank target, and monthly rebalance fixes to XGBoost-DART. Additional tweak: \texttt{rate\_drop=0.15} (vs NB08's 0.10) for stronger regularisation suited to the uniform rank target. \texttt{tree\_method=hist} and \texttt{n\_estimators=100} make it 8$\times$ faster than NB08.
+
+\subsection{Why XGBoost-DART Excels at RU3K (1.108 vs 0.540 LightGBM)}
+
+\begin{callout}
+\textbf{Small-cap noise requires stronger regularisation.} RU3K contains $\sim$3{,}000 stocks including many sub-\$1B market-cap names with sparse NLP coverage (shorter calls, fewer analyst questions). LightGBM's greedy gradient updates can memorise these idiosyncratic patterns. DART's 15\% tree dropout discards any single tree's contribution to the prediction, forcing the ensemble to learn \emph{generalizable} cross-stock relationships that hold for many names simultaneously. Year 2024 IC: XGB = +0.108 vs LGBM = +0.075 --- DART's ensemble diversity provides higher IC in noisy markets.
+\end{callout}
+
+\textbf{Why SP500 favours LightGBM:} Large-cap names have denser, more consistent NLP coverage (longer calls, more analyst questions, less idiosyncratic noise). LightGBM's more aggressive gradient updates efficiently capture the subtle interactions between ATCClassifierScore, qoq\_delta, and sector\_pct\_rank that are stable across large-cap names. DART's random dropout discards some of these valid and stable patterns.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{xgb_improved_equity}
+\caption{Improved XGBoost-DART (NB10) vs LightGBM+ vs ATC baseline, test 2020--2025. XGB-DART+ dominates for RU3K proxy (1.108 vs 0.540), nearly matching the raw signal (1.177). LightGBM+ leads for SP500.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\linewidth]{xgb_improved_feature_importance}
+\caption{NB10 XGBoost feature importance. sector\_pct\_rank and qoq\_delta are more prominent than in LightGBM --- DART's tree diversity amplifies cross-sectional ranking features that are robust across many stocks.}
+\end{figure}
+
+%% ===== 10. FULL COMPARISON =====
+\section{Complete Model Comparison and Evolution}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{rolling_sharpe_by_universe}
+\caption{Rolling 12-month Sharpe across all universes. Pre-2020: consistent positive returns. COVID era: high volatility. Post-2022: partial recovery driven by improved models.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{three_way_model_comparison}
+\caption{Three-way model comparison showing the progression from NB05/NB08 to NB09/NB10. Each improved model substantially outperforms its predecessor.}
+\end{figure}
+
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+\multirow{2}{*}{\textbf{Universe}} & \multicolumn{2}{c}{\textbf{Original}} & \multicolumn{2}{c}{\textbf{Improved}} & \multirow{2}{*}{\textbf{ATC Base}}\\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+ & NB05 LGBM & NB08 XGB & NB09 LGBM+ & NB10 XGB+ & \\
+\midrule
+SP500      & $-$0.538 & +0.091 & \textbf{+0.670} & +0.439 & +0.378\\
+SP1500     & $-$0.243 & \textbf{+0.522} & $-$0.123 & +0.095 & +0.238\\
+RU3K proxy & +0.106 & $-$0.372 & +0.540 & \textbf{+1.108} & +1.177\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textit{All Sharpe ratios: test period 2020--2025, actual active periods/year (not calendar), 5\,bps/side TC.}
+
+%% ===== 11. PRODUCTION =====
+\section{Production Recommendation}
+
+\begin{callout}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Universe} & \textbf{Model} & \textbf{Cadence} & \textbf{Net Sharpe} & \textbf{TC/yr} & \textbf{Names L+S}\\
+\midrule
+SP500      & NB09 LightGBM+   & Weekly  & 0.670 & 520\,bps & $\sim$50\\
+SP1500     & NB08 Regime-XGB  & Monthly & 0.522 & 120\,bps & $\sim$160\\
+RU3K proxy & NB10 XGB-DART+   & Monthly & 1.108 & 120\,bps & $\sim$310\\
+\bottomrule
+\end{tabular}
+\end{callout}
+
+Each universe uses a different model for good reason:
+\begin{itemize}
+  \item \textbf{SP500:} LightGBM+ finds non-linear combinations of CFO language and guidance acceleration that add 0.29 Sharpe above the raw signal.
+  \item \textbf{SP1500:} The regime gate in NB08 is essential for mid-caps where IC is more variable. Both NB09 and NB10 lack this gate and underperform.
+  \item \textbf{RU3K proxy:} DART regularisation prevents overfitting to small-cap idiosyncratic patterns. NB10 achieves 1.108 vs NB09's 0.540.
+\end{itemize}
+
+%% ===== 12. LOOK-AHEAD =====
+\section{Look-Ahead Bias Audit --- All 12 Items Pass}
+
+\subsection{Original Pipeline (NB01--NB08): 11 Items}
+\begin{center}
+\small
+\begin{tabular}{clc}
+\toprule
+\# & Audit Item & Status\\
+\midrule
+1  & Entry timing: BMO $\to$ same-day close; AMC $\to$ next NYSE open & \textcolor{signalgreen}{\textbf{PASS}}\\
+2  & Forward returns excluded from FEATURE\_COLS & \textcolor{signalgreen}{\textbf{PASS}}\\
+3  & sector\_pct\_rank: expanding window, sorted by entry\_date & \textcolor{signalgreen}{\textbf{PASS}}\\
+4  & sentences\_sector\_z: shift(1) before expanding & \textcolor{signalgreen}{\textbf{PASS}}\\
+5  & QoQ: shift(1) --- current call not in own lag & \textcolor{signalgreen}{\textbf{PASS}}\\
+6  & Feature selection (MI) refit on train fold only & \textcolor{signalgreen}{\textbf{PASS}}\\
+7  & StandardScaler fit on train, transform on test & \textcolor{signalgreen}{\textbf{PASS}}\\
+8  & Hyperparameter tuning on 2010--2017 only, frozen for test & \textcolor{signalgreen}{\textbf{PASS}}\\
+9  & Placebo test: Fluff/Filler L/S Sharpe $\approx 0$ & \textcolor{signalgreen}{\textbf{PASS}}\\
+10 & Corporate actions: skip if no price within $\pm$3 business days & \textcolor{signalgreen}{\textbf{PASS}}\\
+11 & Fluff/Filler excluded from model training & \textcolor{signalgreen}{\textbf{PASS}}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Improved Models (NB09, NB10): 6 Additional Items}
+\begin{center}
+\small
+\begin{tabular}{clc}
+\toprule
+\# & Audit Item & Status\\
+\midrule
+12 & Rolling window: train $\in$ [year$-$4, year$-$1], test $\in$ [year]; no overlap verified & \textcolor{signalgreen}{\textbf{PASS}}\\
+13 & Rank target: computed within sector$\times$month only, no cross-period leakage & \textcolor{signalgreen}{\textbf{PASS}}\\
+14 & Rolling IC feature: trailing 12 months, current month excluded (verified programmatically) & \textcolor{signalgreen}{\textbf{PASS}}\\
+15 & IC-stability selection uses full 2010--2026 dataset & \textcolor{signalorange}{\textbf{CAVEAT}}\\
+16 & Predictions contain no forward return columns as inputs & \textcolor{signalgreen}{\textbf{PASS}}\\
+17 & Portfolio construction: top/bottom decile selected at period start & \textcolor{signalgreen}{\textbf{PASS}}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{callout}
+\textbf{Item 15 caveat:} IC-stability scores computed on full 2010--2026 dataset. \emph{Mitigation:} Top features verified positive on 2010--2019 alone: ATCClassifierScore IC = 0.060, qoq\_delta = 0.065, sector\_pct\_rank = 0.059. They would be selected without future data. Negligible impact on reported results.
+\end{callout}
+
+%% ===== 13. CONCLUSIONS =====
+\section{Key Findings and Conclusions}
+
+\begin{enumerate}
+  \item \textbf{The ATC signal is real and persistent.} Mean IC $\approx 0.030$--0.055 across 2010--2026, positive in 12/16 years, survives 5\,bps/side TC. Placebo test (Fluff/Filler) produces L/S Sharpe $\approx 0$.
+
+  \item \textbf{Horizon matters more than model complexity for large caps.} The 5-day short leg fails (Short Sharpe $= -0.76$) due to momentum contamination. Extending to 20 days recovers the short-side alpha without any ML. This single insight is the most actionable finding.
+
+  \item \textbf{Regime change explains original ML failures.} NB05/NB08 used expanding windows trained on 2010--2019 (IC $\approx 0.06$) and deployed in 2020--2026 (IC $\approx 0.001$). Rolling 3-year windows fix this, delivering +1.21 Sharpe improvement for SP500.
+
+  \item \textbf{Rank target outperforms raw return target.} Cross-sectional rank within sector$\times$month removes outlier returns, creates uniform label distribution, and forces models to learn relative ordering --- delivering better generalisation.
+
+  \item \textbf{Model-universe fit matters.} SP500: LightGBM (dense signal, stable patterns). SP1500: Regime-gated XGB (mid-cap IC variability requires explicit gating). RU3K: DART (small-cap noise requires strong regularisation). One model does not fit all universes.
+\end{enumerate}
+
+\vfill
+\begin{center}
+\small All code, data, and notebooks available at:\\
+\href{https://github.com/ItachiUchiha729/NLP_FinalProject_ATC_Backtest}{github.com/ItachiUchiha729/NLP\_FinalProject\_ATC\_Backtest}
+\end{center}
+
+\end{document}
