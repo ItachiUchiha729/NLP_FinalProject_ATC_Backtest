@@ -786,16 +786,22 @@ High idiosyncratic noise per stock. DART's tree dropout forces generalizable pat
 %% ===================================================================
 
 \begin{center}
-\begin{tabular}{lccccc}
+\begin{tabular}{lcccccc}
 \toprule
-\textbf{Universe} & \textbf{Model} & \textbf{Cadence} & \textbf{Net Sharpe} & \textbf{TC/yr} & \textbf{Names L+S}\\
+\textbf{Universe} & \textbf{Model} & \textbf{Cadence} & \textbf{Net Sharpe} & \textbf{TC/yr} & \textbf{Names L+S} & \textbf{Position Size}\\
 \midrule
-SP500      & NB09 LightGBM+  & Weekly  & 0.670 (test) / 0.678 (full) & 520 bps & $\sim$50\\
-SP1500     & NB08 Regime-XGB & Monthly & 0.522 (test)                & 120 bps & $\sim$160\\
-RU3K proxy & NB10 XGB-DART+  & Monthly & 1.108 (test)                & 120 bps & $\sim$310\\
+SP500      & NB09 LightGBM+  & Weekly  & 0.670 & 520 bps & $\sim$50  & Equal-weight top/bottom decile\\
+SP1500     & NB08 Regime-XGB & Monthly & 0.522 & 120 bps & $\sim$160 & Equal-weight $\times$ regime\_conf\\
+RU3K proxy & NB10 XGB-DART+  & Monthly & 1.108 & 120 bps & $\sim$310 & Equal-weight top/bottom decile\\
 \bottomrule
 \end{tabular}
 \end{center}
+
+\textbf{Position-sizing rule:} Each portfolio leg holds $N$ equal-weight positions where $N = \max(\lfloor 0.10 \times |\text{universe events in period}|\rfloor, 1)$ (top decile long, bottom decile short). The SP1500 regime-aware model additionally scales each position by $\text{regime\_conf}_t \in [0,1]$:
+\[
+w_{i,t} = \frac{1}{2N} \times \text{regime\_conf}_t \times \text{sign}(\text{long/short})
+\]
+where $\sum |w_{i,t}| = \text{regime\_conf}_t \le 1$. When confidence is low, gross exposure reduces proportionally --- the portfolio partially de-levers rather than maintaining full notional with poor signals.
 
 \textbf{Capacity constraints:}
 \begin{itemize}[nosep]

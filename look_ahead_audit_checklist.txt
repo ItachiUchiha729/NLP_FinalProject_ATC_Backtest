@@ -1,20 +1,24 @@
 LOOK-AHEAD BIAS AUDIT CHECKLIST
-ProntoNLP Earnings-Call ATC Backtest
-=====================================
+ProntoNLP Earnings-Call ATC Backtest — Chaithanya Pakala
+=========================================================
+
+ORIGINAL PIPELINE (Notebooks 01–08): 11 Items
+----------------------------------------------
 
 [✓] 1. Entry timing — AMC vs BMO
-    Rule: hour(MOSTIMPORTANTDATEUTC) ≥ 16 UTC → next NYSE trading day.
-    Hour < 13 UTC → same day. Hour 13–15 UTC → conservatively next day.
-    Implementation: assign_entry_date() in notebook 02, uses NYSE calendar.
+    Rule: hour(MOSTIMPORTANTDATEUTC) >= 16 UTC → next NYSE trading day (AMC).
+    Hour < 13 UTC → same-day close (BMO). Hour 13–15 UTC → next day (conservative).
+    Implementation: assign_entry_date() in NB02, uses NYSE exchange_calendars.
 
 [✓] 2. Forward returns are targets, never inputs
-    fwd_1d / fwd_3d / fwd_5d / fwd_10d / fwd_20d computed from prices AFTER entry_date.
-    Columns excluded from FEATURE_COLS by name in notebook 05 NON_FEAT list.
+    fwd_1d/fwd_3d/fwd_5d/fwd_10d/fwd_20d computed from prices AFTER entry_date.
+    All fwd_* columns excluded from FEATURE_COLS via NON_FEAT list in NB05.
 
 [✓] 3. Cross-sectional features are point-in-time
-    sector_pct_rank uses expanding_pct_rank() which only sees events before current row.
-    sentences_sector_z uses expanding mean/std.
-    QoQ features use .shift(1) — current call never included in its own lag.
+    sector_pct_rank: sorted by entry_date; only prior trade-day events in denominator.
+    Same-day earnings calls do not see each other's rank.
+    sentences_sector_z: expanding mean/std with .shift(1) before .expanding().
+    QoQ features: .shift(1) lag — current call never included in its own lag.
 
 [✓] 4. Feature selection is part of training
     mutual_info_regression refit on training fold only at each walk-forward step.
@@ -22,34 +26,66 @@ ProntoNLP Earnings-Call ATC Backtest
 
 [✓] 5. Imputation and scaling are part of training
     StandardScaler.fit() on train fold; .transform() applied to test.
-    Missing value fill (fillna(0)) applied identically to both.
+    fillna(0) applied identically to both train and test.
 
 [✓] 6. Universe membership is point-in-time
-    SP500/SP400/SP600: fetched from WRDS comp.idxcst_his (institutional subscription).
-    GVKEY-based interval join — exact entry/exit dates, no ticker-rename errors.
-    Caveat: only current members available (thru=NULL rows); deleted companies absent.
-    This creates mild survivorship bias for pre-2020 SP500/SP1500 (documented in report).
-    RU3K: reconstructed from CRSP monthly market-cap (crsp.msf) at each June recon.
-    Top 3000 US common stocks by market cap — genuine PIT, no survivorship bias.
+    SP500/SP400/SP600: WRDS comp.idxcst_his (institutional subscription).
+    GVKEY interval join — exact entry/removal dates, no ticker-rename errors.
+    Caveat: current members only (thru=NULL); deleted stocks absent. Mild
+    survivorship bias (<2% of events/year) documented in report Section 2.
+    RU3K: CRSP crsp.msf top-3000 by market cap at each June reconstitution.
+    Genuine PIT — no survivorship bias. 16 annual recons, 6,626 unique GVKEYs.
 
-[✓] 7. No 'next quarter minus current quarter' QoQ deltas
-    qoq_delta = ATC_t - mean(ATC_{t-1:t-4}), using .shift(1) for the lag.
+[✓] 7. No look-ahead in QoQ features
+    qoq_delta = ATC_t - mean(ATC_{t-1:t-4}), all lags use .shift(1).
     qoq_acceleration = ATC_t - 2*ATC_{t-1} + ATC_{t-2}, all lagged.
+    Current quarter score never appears in its own lag computation.
 
-[✓] 8. Hyperparameter tuning uses held-out period only
-    Grid search run on 2010–2017. Parameters frozen before any 2018+ data is seen.
+[✓] 8. Hyperparameter tuning on held-out period only
+    Grid search on 2010–2017 only. Parameters frozen before any 2018+ data.
     Walk-forward test starts 2020-Q1. No re-tuning during test period.
 
 [✓] 9. Placebo test passes
-    Signal built from Fluff/Filler-only AspectTheme columns produces L/S Sharpe ≈ 0.
-    Confirms no structural look-ahead in the pipeline.
+    Signal from Fluff/Filler-only AspectTheme columns → L/S Sharpe ≈ 0
+    across all universes and horizons. Confirms no structural look-ahead.
 
 [✓] 10. Corporate actions / delistings handled
-    If no close price found on entry_date (or within +3 business days), trade is skipped.
-    forward returns are NaN → event excluded from quintile assignment.
+    If no adjusted close price within ±3 business days of entry_date,
+    forward return = NaN → event excluded from quintile assignment.
 
 [✓] 11. Fluff/Filler excluded from predictive features
-    PLACEBO_COLS (Fluff/Filler) excluded from ASPECT_COLS in notebook 01.
-    Never fed into MWNS features or model training.
+    PLACEBO_COLS excluded from ASPECT_COLS in NB01.
+    Never enter MWNS construction or model training. Retained for placebo only.
 
-All 11 items: PASS
+IMPROVED MODELS (Notebooks 09–10): 6 Additional Items
+------------------------------------------------------
+
+[✓] 12. Rolling window — no temporal overlap with test
+    Train: [test_year-4, test_year-1]. Test: [test_year, test_year+1].
+    Verified programmatically: train_end < test_start for all 6 annual folds.
+
+[✓] 13. Rank target computed within sector×month only
+    rank_target = rank(fwd_20d)/N within each (SECTOR, month) group.
+    No cross-period leakage — only contemporaneous same-group events used.
+
+[✓] 14. Rolling IC feature strictly backward-looking
+    rolling_ic at month M = Spearman IC over months [M-12, M-1].
+    Current month M EXCLUDED. Verified programmatically.
+
+[~] 15. IC-stability feature selection — documented caveat
+    Stability scores computed on full 2010–2026 (includes test period).
+    MITIGATION: top features verified positive on 2010–2019 alone —
+    ATCClassifierScore IC=0.060, qoq_delta IC=0.065, sector_pct_rank IC=0.059.
+    Same top-20 features selected on historical data only.
+
+[✓] 16. No forward returns as model inputs
+    Prediction parquets include fwd_20d for evaluation only, not as model input.
+
+[✓] 17. Portfolio construction — no intra-period look-ahead
+    Top/bottom decile selected at START of each month using prior predictions.
+    No rebalancing within the 20-day holding period.
+
+=========================================================
+SUMMARY: 17 items — 16 PASS, 1 CAVEAT (item 15, mitigated), 0 FAIL
+Audit signed off: Chaithanya Pakala, May 2026
+=========================================================
