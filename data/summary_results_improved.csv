@@ -1,13 +1,13 @@
-Universe,Period,Cadence,Horizon,Gross Sharpe,Net Sharpe,Turnover,N Events
-SP500,Full,Weekly,20d,1.371,1.23,99.9%,32203
-SP500,Pre-2020,Weekly,20d,1.975,1.822,99.9%,19091
-SP500,COVID era,Weekly,20d,0.905,0.786,99.9%,6167
-SP500,Post-2022,Weekly,20d,0.472,0.332,99.9%,6945
-SP1500,Full,Weekly,20d,1.558,1.421,100.0%,79945
-SP1500,Pre-2020,Weekly,20d,2.17,2.024,100.0%,43354
-SP1500,COVID era,Weekly,20d,0.066,-0.056,100.0%,16795
-SP1500,Post-2022,Weekly,20d,1.567,1.432,100.0%,19796
-RU3K,Full,Weekly,20d,1.411,1.342,100.0%,214124
-RU3K,Pre-2020,Weekly,20d,1.599,1.517,100.0%,126022
-RU3K,COVID era,Weekly,20d,0.838,0.787,99.9%,42450
-RU3K,Post-2022,Weekly,20d,1.823,1.756,100.0%,45652
+Universe,Period,Config,Gross Sharpe,Net Sharpe,Turnover,N Events
+SP500,Full,Weekly+5d,0.608,0.382,99.9%,32203
+SP500,Pre-2020,Weekly+5d,0.866,0.634,100.0%,19091
+SP500,COVID era,Weekly+5d,0.682,0.502,100.0%,6167
+SP500,Post-2022,Weekly+5d,-0.284,-0.57,99.9%,6945
+SP1500,Full,Monthly+20d,0.67,0.566,99.9%,79906
+SP1500,Pre-2020,Monthly+20d,1.308,1.193,99.9%,43338
+SP1500,COVID era,Monthly+20d,-0.713,-0.79,99.9%,16779
+SP1500,Post-2022,Monthly+20d,0.793,0.655,99.9%,19789
+RU3K proxy,Full,Monthly+20d,-0.135,-0.142,99.8%,214124
+RU3K proxy,Pre-2020,Monthly+20d,1.184,1.096,99.8%,126022
+RU3K proxy,COVID era,Monthly+20d,0.265,0.155,99.8%,42450
+RU3K proxy,Post-2022,Monthly+20d,-0.45,-0.453,99.8%,45652

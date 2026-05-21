@@ -1,4 +1,4 @@
-Universe,Signal,Cadence,Horizon,Gross Sharpe,Net Sharpe,Avg TC drag/yr,Avg Turnover,Avg Names L+S,Capacity note,Key risk
-SP500,Regime-XGB (NB08),Monthly,20d,1.08,1.02,~120 bps,~100% /month,~50,SP500 large-caps: ample liquidity,Regime break if signal IC turns negative
-SP1500,ATCClassifierScore,Weekly,20d,1.56,1.42,~520 bps,~100% /week,~160,"Mid-caps: liquidity varies, size < $200M notional",SP400/SP600 PIT approx pre-2012/2019
-RU3K proxy,ATCClassifierScore,Weekly,20d,1.41,1.34,~520 bps,~100% /week,~740,Small-caps: 10-20% untradeable on any day; use liquidity filter,Proxy universe (all US ATC tickers) ≠ true Russell 3000
+Universe,Signal,Cadence,Horizon,Gross Sharpe,Net Sharpe,Annual TC (bps),Avg Turnover,Avg Names L+S,Capacity note,Key risk
+SP500,ATCClassifierScore,Weekly,5d,0.609,0.383,~520,~100% /week,~50,SP500 large-caps: ample liquidity,Signal IC ~0.04 — modest but persistent (2010-2026)
+SP1500,ATCClassifierScore,Monthly,20d,0.684,0.58,~120,~100% /month,~160,"Mid-caps: liquidity varies, cap < $200M notional per leg",SP400/SP600 PIT approx pre-2012/2019; post-2020 more reliable
+RU3K proxy,ATCClassifierScore,N/A,N/A,negative,negative,N/A,N/A,N/A,Not recommended — signal does not survive TC at this breadth,Too many untradeable / illiquid names; proxy != true Russell 3000
