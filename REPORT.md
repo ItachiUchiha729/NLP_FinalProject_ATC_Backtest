@@ -676,3 +676,52 @@ Notably, raw `ATCClassifierScore` drops from being the dominant feature (NB05) t
 
 ![Improved LightGBM Feature Importance](figures/lgbm_improved_feature_importance.png)
 *Figure 20: Feature importance for improved LightGBM — CFO language and financial performance dominate.*
+
+---
+
+## 19. NB10 — Improved XGBoost-DART
+
+Applying the same three fixes as NB09 to XGBoost-DART, with one additional tweak: `rate_drop=0.15` (slightly higher than NB08's 0.10) to force stronger regularisation on the rank target.
+
+### 19.1 Results (Test Period 2020–2025)
+
+| Universe | NB05 LGBM | NB08 XGB | **NB09 LGBM+** | **NB10 XGB+** | ATC Base |
+|---|---|---|---|---|---|
+| SP500 | −0.538 | +0.091 | **+0.670** | +0.439 | +0.378 |
+| SP1500 | −0.243 | **+0.522** | −0.123 | +0.095 | +0.238 |
+| RU3K proxy | +0.106 | −0.372 | +0.540 | **+1.108** | +1.177 |
+
+### 19.2 Model-Universe Sweet Spots
+
+**SP500** — LightGBM+ (NB09) wins: more consistent year-by-year IC. LightGBM's gradient boosting with MI-selected features finds subtle interactions more reliably for liquid large-caps where there are many events per period.
+
+**SP1500** — Original regime-gated XGB (NB08) still best (0.522): the rolling IC confidence gate is uniquely valuable for mid-caps, where the signal IC is more variable. Without explicit regime gating, both improved models struggle.
+
+**RU3K** — XGB-DART+ (NB10) is the standout at 1.108, nearly matching the raw baseline (1.177). DART's dropout regularisation prevents the model from over-fitting to individual small-cap patterns that are highly idiosyncratic.
+
+### 19.3 Year-by-Year IC (SP500)
+
+| Year | XGB+ IC | LGBM+ IC | ATC Base IC |
+|---|---|---|---|
+| 2020 | −0.078 | −0.012 | −0.095 |
+| 2021 | +0.051 | **+0.068** | −0.019 |
+| 2022 | +0.059 | +0.054 | +0.038 |
+| 2023 | +0.008 | +0.020 | +0.040 |
+| 2024 | **+0.108** | +0.075 | +0.035 |
+| 2025 | −0.015 | −0.006 | −0.046 |
+
+XGB+ has the best single year in 2024 (+0.108) but is noisier than LightGBM+ overall.
+
+### 19.4 Production Recommendation (Updated)
+
+| Universe | Best Model | Net Sharpe | Rationale |
+|---|---|---|---|
+| SP500 | **NB09 LightGBM+** | 0.670 | Beats baseline and all XGB variants |
+| SP1500 | **NB08 Regime-XGB** | 0.522 | Regime gating essential for mid-caps |
+| RU3K proxy | **NB10 XGB-DART+** | 1.108 | Near-matches raw signal, lower model risk |
+
+![Improved XGBoost Equity Curves](figures/xgb_improved_equity.png)
+*Figure 21: Improved XGBoost-DART vs LightGBM vs ATC baseline, all universes, test period 2020–2025.*
+
+![Improved XGBoost Feature Importance](figures/xgb_improved_feature_importance.png)
+*Figure 22: XGBoost-DART feature importance — sector_pct_rank and qoq_delta are more prominent than in LightGBM.*

@@ -1,5 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>ProntoNLP ATC Backtest — Chaithanya Pakala</title><style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>ProntoNLP ATC Backtest — Chaithanya Pakala</title><style>* { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif; font-size: 12pt; line-height: 1.65; color: #1a1a1a; width: 170mm; margin: 0 auto; padding: 10mm 0; }
 h1 { font-size: 1.8em; border-bottom: 3px solid #0366d6; padding-bottom: 10px; margin: 28px 0 14px; color: #0366d6; }
 h2 { font-size: 1.35em; border-bottom: 1px solid #d1d5da; padding-bottom: 5px; margin: 32px 0 10px; color: #24292e; }
@@ -20,8 +19,7 @@ hr { border: none; border-top: 2px solid #e1e4e8; margin: 28px 0; }
 figure { margin: 16px 0; text-align: center; width: 100%; }
 figure img { max-width: 95%; max-height: 160mm; width: auto; height: auto; border-radius: 5px; box-shadow: 0 1px 6px rgba(0,0,0,0.15); display: block; margin: 0 auto; }
 figcaption { font-size: 0.82em; color: #586069; margin-top: 5px; font-style: italic; }
-@page { margin: 18mm 20mm; size: A4; }
-</style></head><body>
+@page { margin: 18mm 20mm; size: A4; }</style></head><body>
 <h1>ProntoNLP Earnings-Call ATC Signal Backtest</h1>
 <h2>LLM-Driven Quantitative Research — Final Project Report</h2>
 <p><strong>Author:</strong> Chaithanya Pakala   <strong>Dataset:</strong> Earnings_ATC_until_2026-04-21.csv (2.74M rows, 609 columns, 2010–2026)   <strong>Pipeline:</strong> 8 sequential notebooks — one-command reproduction: <code>python run_all.py</code></p>
@@ -314,4 +312,22 @@ wrds==3.x, psycopg2==2.x, pyarrow==14.x
 <em>Figure 19: Improved LightGBM vs Baseline ATCClassifierScore, test period 2020–2025.</em>
 <figure><img src="file:///Users/chaithanyapakala/Downloads/NLP_FinalProject/figures/lgbm_improved_feature_importance.png" alt="Improved LightGBM Feature Importance"><figcaption><em>Improved LightGBM Feature Importance</em></figcaption></figure>
 <em>Figure 20: Feature importance for improved LightGBM — CFO language and financial performance dominate.</em>
+<hr>
+<h2>19. NB10 — Improved XGBoost-DART</h2>
+<p>Applying the same three fixes as NB09 to XGBoost-DART, with one additional tweak: <code>rate_drop=0.15</code> (slightly higher than NB08's 0.10) to force stronger regularisation on the rank target.</p>
+<h3>19.1 Results (Test Period 2020–2025)</h3>
+<table><tr><th>Universe</th><th>NB05 LGBM</th><th>NB08 XGB</th><th><strong>NB09 LGBM+</strong></th><th><strong>NB10 XGB+</strong></th><th>ATC Base</th></tr><tr><td>SP500</td><td>−0.538</td><td>+0.091</td><td><strong>+0.670</strong></td><td>+0.439</td><td>+0.378</td></tr><tr><td>SP1500</td><td>−0.243</td><td><strong>+0.522</strong></td><td>−0.123</td><td>+0.095</td><td>+0.238</td></tr><tr><td>RU3K proxy</td><td>+0.106</td><td>−0.372</td><td>+0.540</td><td><strong>+1.108</strong></td><td>+1.177</td></tr></table>
+<h3>19.2 Model-Universe Sweet Spots</h3>
+<p><strong>SP500</strong> — LightGBM+ (NB09) wins: more consistent year-by-year IC. LightGBM's gradient boosting with MI-selected features finds subtle interactions more reliably for liquid large-caps where there are many events per period.</p>
+<p><strong>SP1500</strong> — Original regime-gated XGB (NB08) still best (0.522): the rolling IC confidence gate is uniquely valuable for mid-caps, where the signal IC is more variable. Without explicit regime gating, both improved models struggle.</p>
+<p><strong>RU3K</strong> — XGB-DART+ (NB10) is the standout at 1.108, nearly matching the raw baseline (1.177). DART's dropout regularisation prevents the model from over-fitting to individual small-cap patterns that are highly idiosyncratic.</p>
+<h3>19.3 Year-by-Year IC (SP500)</h3>
+<table><tr><th>Year</th><th>XGB+ IC</th><th>LGBM+ IC</th><th>ATC Base IC</th></tr><tr><td>2020</td><td>−0.078</td><td>−0.012</td><td>−0.095</td></tr><tr><td>2021</td><td>+0.051</td><td><strong>+0.068</strong></td><td>−0.019</td></tr><tr><td>2022</td><td>+0.059</td><td>+0.054</td><td>+0.038</td></tr><tr><td>2023</td><td>+0.008</td><td>+0.020</td><td>+0.040</td></tr><tr><td>2024</td><td><strong>+0.108</strong></td><td>+0.075</td><td>+0.035</td></tr><tr><td>2025</td><td>−0.015</td><td>−0.006</td><td>−0.046</td></tr></table>
+<p>XGB+ has the best single year in 2024 (+0.108) but is noisier than LightGBM+ overall.</p>
+<h3>19.4 Production Recommendation (Updated)</h3>
+<table><tr><th>Universe</th><th>Best Model</th><th>Net Sharpe</th><th>Rationale</th></tr><tr><td>SP500</td><td><strong>NB09 LightGBM+</strong></td><td>0.670</td><td>Beats baseline and all XGB variants</td></tr><tr><td>SP1500</td><td><strong>NB08 Regime-XGB</strong></td><td>0.522</td><td>Regime gating essential for mid-caps</td></tr><tr><td>RU3K proxy</td><td><strong>NB10 XGB-DART+</strong></td><td>1.108</td><td>Near-matches raw signal, lower model risk</td></tr></table>
+<figure><img src="file:///Users/chaithanyapakala/Downloads/NLP_FinalProject/figures/xgb_improved_equity.png" alt="Improved XGBoost Equity Curves"><figcaption><em>Improved XGBoost Equity Curves</em></figcaption></figure>
+<em>Figure 21: Improved XGBoost-DART vs LightGBM vs ATC baseline, all universes, test period 2020–2025.</em>
+<figure><img src="file:///Users/chaithanyapakala/Downloads/NLP_FinalProject/figures/xgb_improved_feature_importance.png" alt="Improved XGBoost Feature Importance"><figcaption><em>Improved XGBoost Feature Importance</em></figcaption></figure>
+<em>Figure 22: XGBoost-DART feature importance — sector_pct_rank and qoq_delta are more prominent than in LightGBM.</em>
 </body></html>

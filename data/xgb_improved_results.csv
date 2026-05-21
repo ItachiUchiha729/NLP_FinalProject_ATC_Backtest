@@ -1,0 +1,4 @@
+Universe,Improved XGB (NB10),Improved LGBM (NB09),Baseline ATC
+SP500,0.439,0.67,0.378
+SP1500,0.095,-0.123,0.238
+RU3K proxy,1.108,0.54,1.177
