@@ -44,9 +44,58 @@ def run():
         print("ERROR: wrds package not installed. Run: pip install wrds")
         sys.exit(1)
 
-    print("Connecting to WRDS...")
-    print("(Credentials are saved to ~/.pgpass after first login — subsequent runs are automatic.)\n")
-    db = wrds.Connection()
+    # Show native macOS dialogs to collect WRDS credentials
+    # (appears as a popup at the top of the screen — type and press OK)
+    def _ask(prompt: str, hidden: bool = False) -> str:
+        hidden_str = 'with hidden answer' if hidden else ''
+        script = (
+            f'set val to text returned of '
+            f'(display dialog "{prompt}" default answer "" {hidden_str} '
+            f'buttons {{"Cancel","OK"}} default button "OK" '
+            f'with title "WRDS Login")'
+            f'\nreturn val'
+        )
+        result = subprocess.run(
+            ['osascript', '-e', script],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            print('Dialog cancelled.')
+            sys.exit(0)
+        return result.stdout.strip()
+
+    import subprocess
+    print("A login dialog will appear — enter your WRDS credentials there.")
+    _wrds_user = _ask('WRDS Username:')
+    _wrds_pass = _ask('WRDS Password:', hidden=True)
+
+    # Bypass wrds.Connection() (which falls back to interactive on failure).
+    # Connect directly via SQLAlchemy — same driver, full error visibility.
+    import sqlalchemy as sa, urllib.parse
+
+    print(f"Connecting to WRDS as '{_wrds_user}'...")
+    _enc_pass = urllib.parse.quote(_wrds_pass, safe='')
+    _uri = f"postgresql://{_wrds_user}:{_enc_pass}@wrds-pgdata.wharton.upenn.edu:9737/wrds"
+    try:
+        engine = sa.create_engine(_uri, isolation_level='AUTOCOMMIT',
+                                  connect_args={'connect_timeout': 20,
+                                                'sslmode': 'require'})
+        conn = engine.connect()
+        print("Connected successfully.")
+    except Exception as _e:
+        print(f"\nConnection failed: {_e}")
+        print("\nWRDS port 9737 is blocked from this network.")
+        print("Fix: connect to your university VPN, then rerun this script.")
+        sys.exit(1)
+
+    def raw_sql(sql, date_cols=None):
+        import pandas as _pd
+        df = _pd.read_sql(sql, conn)
+        if date_cols:
+            for c in date_cols:
+                if c in df.columns:
+                    df[c] = _pd.to_datetime(df[c])
+        return df
 
     # ── S&P 500 / 400 / 600 — Compustat PIT intervals ────────────────────────
     print("\nFetching comp.idxcst_his (S&P 500 / 400 / 600)...")
@@ -60,7 +109,7 @@ def run():
         WHERE UPPER(indextype) IN ('SP500', 'SP400', 'SP600')
         ORDER BY gvkey, idx_type, start_dt
     """
-    sp_hist = db.raw_sql(sp_sql, date_cols=['start_dt', 'end_dt'])
+    sp_hist = raw_sql(sp_sql, date_cols=['start_dt', 'end_dt'])
     sp_hist.to_parquet(SP_CACHE, index=False)
     print(f"  Saved {len(sp_hist):,} rows → {SP_CACHE.name}")
     for idx in ['SP500', 'SP400', 'SP600']:
@@ -86,7 +135,7 @@ def run():
           AND msf.shrout  > 0
         ORDER BY msf.date, msf.permno
     """
-    crsp_me = db.raw_sql(me_sql, date_cols=['date'])
+    crsp_me = raw_sql(me_sql, date_cols=['date'])
     print(f"  {len(crsp_me):,} rows fetched")
 
     # ── CRSP–Compustat link (PERMNO → GVKEY) ─────────────────────────────────
@@ -102,11 +151,11 @@ def run():
           AND linkprim IN ('P', 'J', 'C')
         ORDER BY permno, link_start
     """
-    crsp_link = db.raw_sql(link_sql, date_cols=['link_start', 'link_end'])
+    crsp_link = raw_sql(link_sql, date_cols=['link_start', 'link_end'])
     crsp_link.to_parquet(LINK_CACHE, index=False)
     print(f"  Saved {len(crsp_link):,} rows → {LINK_CACHE.name}")
 
-    db.close()
+    conn.close()
     print("\nWRDS connection closed.")
 
     # ── Build Russell 3000 PIT membership ────────────────────────────────────

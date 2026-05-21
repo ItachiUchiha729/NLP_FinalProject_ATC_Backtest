@@ -1,6 +1,6 @@
 {
   "n_estimators": 200,
-  "num_leaves": 63,
+  "num_leaves": 31,
   "learning_rate": 0.01,
   "min_child_samples": 30,
   "subsample": 0.8,

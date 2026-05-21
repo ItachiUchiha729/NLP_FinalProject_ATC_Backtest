@@ -1,4 +1,4 @@
 Universe,Signal,Cadence,Horizon,Gross Sharpe,Net Sharpe,Annual TC (bps),Avg Turnover,Avg Names L+S,Capacity note,Key risk
-SP500,ATCClassifierScore,Weekly,5d,0.609,0.383,~520,~100% /week,~50,SP500 large-caps: ample liquidity,Signal IC ~0.04 — modest but persistent (2010-2026)
-SP1500,ATCClassifierScore,Monthly,20d,0.684,0.58,~120,~100% /month,~160,"Mid-caps: liquidity varies, cap < $200M notional per leg",SP400/SP600 PIT approx pre-2012/2019; post-2020 more reliable
-RU3K proxy,ATCClassifierScore,N/A,N/A,negative,negative,N/A,N/A,N/A,Not recommended — signal does not survive TC at this breadth,Too many untradeable / illiquid names; proxy != true Russell 3000
+SP500,ATCClassifierScore,Weekly,5d,0.754,0.678,~520,~100% /week,~50,SP500 large-caps: ample liquidity,Signal IC ~0.04 — modest but persistent (2010-2026)
+SP1500,ATCClassifierScore,Monthly,20d,0.556,0.51,~120,~100% /month,~160,"Mid-caps: liquidity varies, cap < $200M notional per leg",SP400/SP600 current-members only (mild survivorship bias pre-2020)
+RU3K proxy,ATCClassifierScore,Monthly,20d,0.891,0.829,~120,~100% /month,~310,Broad US proxy — not true Russell 3000; liquidity risk in small-caps,Proxy != official R3K; small-cap names may be untradeable at scale

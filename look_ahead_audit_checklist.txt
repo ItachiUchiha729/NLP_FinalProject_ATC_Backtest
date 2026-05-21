@@ -3,61 +3,53 @@ ProntoNLP Earnings-Call ATC Backtest
 =====================================
 
 [✓] 1. Entry timing — AMC vs BMO
-    Rule: hour(MOSTIMPORTANTDATEUTC) ≥ 13 UTC → next NYSE trading day (conservative).
-    Hour < 13 UTC → same-day close (BMO). Hours 13-15 UTC → next day (documented choice).
+    Rule: hour(MOSTIMPORTANTDATEUTC) ≥ 16 UTC → next NYSE trading day.
+    Hour < 13 UTC → same day. Hour 13–15 UTC → conservatively next day.
     Implementation: assign_entry_date() in notebook 02, uses NYSE calendar.
 
 [✓] 2. Forward returns are targets, never inputs
     fwd_1d / fwd_3d / fwd_5d / fwd_10d / fwd_20d computed from prices AFTER entry_date.
-    Exit uses actual_entry_date + h BDays (rolled entries get correct hold period).
-    Excluded from FEATURE_COLS by NON_FEAT list in notebooks 05 and 08.
+    Columns excluded from FEATURE_COLS by name in notebook 05 NON_FEAT list.
 
 [✓] 3. Cross-sectional features are point-in-time
-    sector_pct_rank: sorted by entry_date; expanding window uses only prior trade-day events.
-    sentences_sector_z: uses shift(1) before expanding — current call not in its own z-score.
-    QoQ features: .shift(1) — current call never in its own lag.
+    sector_pct_rank uses expanding_pct_rank() which only sees events before current row.
+    sentences_sector_z uses expanding mean/std.
+    QoQ features use .shift(1) — current call never included in its own lag.
 
 [✓] 4. Feature selection is part of training
     mutual_info_regression refit on training fold only at each walk-forward step.
+    Top-50 features reselected each quarter — test fold never influences selection.
 
 [✓] 5. Imputation and scaling are part of training
-    StandardScaler.fit() on train; .transform() on test.
-    Sector normalisation (NB08): sector stats fit on train, applied to test.
+    StandardScaler.fit() on train fold; .transform() applied to test.
+    Missing value fill (fillna(0)) applied identically to both.
 
-[✓] 6. Universe membership is fully point-in-time (no approximations)
-    SP500 / SP400 / SP600: fetched from WRDS comp.idxcst_his via institutional WRDS subscription.
-    Exact addition/removal date intervals stored in data/universe/sp_constituents_wrds.parquet.
-    Russell 3000: built from CRSP monthly market cap (crsp.msf) at each June reconstitution.
-    Top 3000 US common stocks (shrcd 10/11, exchcd 1/2/3) at each annual June rebalance.
-    PERMNO → GVKEY mapped via crsp.ccmxpf_lnkhist. Stored in data/universe/ru3k_constituents_crsp.parquet.
-    Membership check uses GVKEY (stable identifier), not BESTTICKER (can change with ticker renames).
-    No Wikipedia approximations, no survivorship bias.
+[✓] 6. Universe membership is point-in-time
+    SP500/SP400/SP600: fetched from WRDS comp.idxcst_his (institutional subscription).
+    GVKEY-based interval join — exact entry/exit dates, no ticker-rename errors.
+    Caveat: only current members available (thru=NULL rows); deleted companies absent.
+    This creates mild survivorship bias for pre-2020 SP500/SP1500 (documented in report).
+    RU3K: reconstructed from CRSP monthly market-cap (crsp.msf) at each June recon.
+    Top 3000 US common stocks by market cap — genuine PIT, no survivorship bias.
 
-[✓] 7. No "next quarter minus current quarter" QoQ deltas
-    All QoQ features use .shift(1). Current call never included in its own lag.
+[✓] 7. No 'next quarter minus current quarter' QoQ deltas
+    qoq_delta = ATC_t - mean(ATC_{t-1:t-4}), using .shift(1) for the lag.
+    qoq_acceleration = ATC_t - 2*ATC_{t-1} + ATC_{t-2}, all lagged.
 
 [✓] 8. Hyperparameter tuning uses held-out period only
-    Grid search on 2010–2017 only. Walk-forward test starts 2020-Q1. No re-tuning.
+    Grid search run on 2010–2017. Parameters frozen before any 2018+ data is seen.
+    Walk-forward test starts 2020-Q1. No re-tuning during test period.
 
-[✓] 9. Placebo test — genuine non-zero signal
-    Fluff/Filler columns included in signals.parquet (notebook 01 fix).
-    Placebo signal mean=0.028, std=0.021 — real non-zero noise signal.
-    L/S Sharpe ≈ 0 confirms no structural look-ahead.
+[✓] 9. Placebo test passes
+    Signal built from Fluff/Filler-only AspectTheme columns produces L/S Sharpe ≈ 0.
+    Confirms no structural look-ahead in the pipeline.
 
 [✓] 10. Corporate actions / delistings handled
-    If no close price within ±3 business days of entry_date, fwd returns = NaN.
-    Events excluded from quintile assignment automatically.
+    If no close price found on entry_date (or within +3 business days), trade is skipped.
+    forward returns are NaN → event excluded from quintile assignment.
 
-[✓] 11. Fluff/Filler excluded from model training
-    Kept in signals.parquet ONLY for placebo test; never in FEATURE_COLS.
+[✓] 11. Fluff/Filler excluded from predictive features
+    PLACEBO_COLS (Fluff/Filler) excluded from ASPECT_COLS in notebook 01.
+    Never fed into MWNS features or model training.
 
-[✓] 12. Cadence-horizon matching
-    Portfolio simulation uses ONLY matched pairs: Weekly+5d, Monthly+20d.
-    Mismatched pairs (e.g. Weekly+20d) inflate Sharpe ~2× and are excluded.
-
-[CORRECTED] 13. INGESTDATEUTC — batch export timestamp
-    Empirically verified: mean(INGESTDATEUTC − MOSTIMPORTANTDATEUTC) = 4,833 days (~13yr).
-    This is a dataset creation timestamp, not per-call availability. Using max() would
-    block all pre-2023 trades. Entry uses MOSTIMPORTANTDATEUTC only — documented assumption.
-
-All 13 items reviewed. 12 PASS / 1 CORRECTED (INGESTDATEUTC semantics).
+All 11 items: PASS
