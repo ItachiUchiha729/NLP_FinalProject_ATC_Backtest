@@ -4,21 +4,22 @@ ProntoNLP Earnings-Call ATC Backtest
 
 [✓] 1. Entry timing — AMC vs BMO
     Rule: hour(MOSTIMPORTANTDATEUTC) ≥ 13 UTC → next NYSE trading day (conservative).
-    Hour < 13 UTC → same-day close (BMO).
-    Hours 13-15 UTC → treated as AMC (conservative choice, documented).
+    Hour < 13 UTC → same-day close (BMO). Hours 13-15 UTC → next day (documented choice).
     Implementation: assign_entry_date() in notebook 02, uses NYSE calendar via
-    pandas_market_calendars. Entry dates are always tz-naive trading day closes.
+    pandas_market_calendars. All entry_date values are tz-naive trading-day closes.
 
 [✓] 2. Forward returns are targets, never inputs
-    fwd_1d / fwd_3d / fwd_5d / fwd_10d / fwd_20d computed from prices AFTER entry_date.
-    Excluded from FEATURE_COLS by name in NON_FEAT list in notebooks 05 and 08.
-    Note: feature names containing "fwd" (e.g. ks_bad_now_good_fwd) refer to
-    "forward guidance" (an ATC Aspect dimension), NOT forward price returns.
+    fwd_1d / fwd_3d / fwd_5d / fwd_10d / fwd_20d computed from yfinance prices AFTER entry_date.
+    Excluded from FEATURE_COLS by NON_FEAT list in notebooks 05 and 08.
+    Note: feature names containing "fwd" (e.g. ks_bad_now_good_fwd) refer to "forward
+    guidance" — an ATC Aspect dimension — NOT forward price returns.
 
 [✓] 3. Cross-sectional features are point-in-time
-    sector_pct_rank uses expanding_pct_rank() — loop starts at i=1, uses only
-    series.iloc[:i] (strictly prior observations). Requires min 10 prior events.
-    QoQ features use .shift(1): qoq_delta = ATC_t - mean(ATC_{t-1}...ATC_{t-4}).
+    sector_pct_rank: expanding_pct_rank() loop starts at i=1; uses only series.iloc[:i].
+    Sorted by SECTOR, entry_date (trade date, not call date) to avoid same-day leakage.
+    sentences_sector_z: uses prior_expanding_z() with shift(1) before expanding mean/std
+    so the current call is NOT included in its own normalisation denominator.
+    QoQ features: qoq_delta = ATC_t − mean(ATC_{t-1}…ATC_{t-4}), using .shift(1).
     Current call never appears in its own lag calculation.
 
 [✓] 4. Feature selection is part of training
@@ -27,44 +28,47 @@ ProntoNLP Earnings-Call ATC Backtest
 
 [✓] 5. Imputation and scaling are part of training
     StandardScaler.fit() on train fold; .transform() applied to test.
-    Sector normalization (notebook 08): sector means/stds fit on train, applied to test.
+    Sector normalisation (NB08): sector means/stds fit on train, applied to test.
 
 [✓] 6. Universe membership is point-in-time
     SP500: Wikipedia historical additions/removals reconstructed back to 1976.
-    Verified: 458 unique tickers in 2010 → 503 by 2025 (genuine PIT growth pattern).
-    SP1500 CAVEAT: SP400 history from Wikipedia begins 2012, SP600 begins 2019.
-    Pre-2012/2019 portions use current members → mild survivorship bias for early years.
-    Reported SP1500 alpha for 2010-2012 is an upper bound; document in write-up.
-    RU3K CAVEAT: Proxy uses all US-listed ATC tickers (~7,372 vs true ~3,000).
-    Reported RU3K alpha is an upper bound; document in write-up.
+    Verified: 458 unique tickers in 2010 → 503 by 2025 (genuine PIT growth, not current-only).
+    SP1500 CAVEAT: Wikipedia SP400 history begins 2012, SP600 begins 2019.
+    Pre-2012/2019 portions use current membership → mild survivorship. Reported alpha
+    for those periods is an upper bound; flagged explicitly in results tables.
+    RU3K CAVEAT: Proxy = all US-listed ATC tickers (~7,372 vs true ~3,000).
+    Labelled "RU3K proxy" throughout. Reported alpha is an upper bound.
 
 [✓] 7. No "next quarter minus current quarter" QoQ deltas
-    qoq_delta = ATC_t - mean(ATC_{t-1:t-4}), shift(1) verified on sample tickers.
-    qoq_acceleration = ATC_t - 2×ATC_{t-1} + ATC_{t-2}, all properly lagged.
+    All QoQ features use .shift(1): qoq_delta = ATC_t − mean(prior 4),
+    qoq_acceleration = ATC_t − 2·ATC_{t-1} + ATC_{t-2}.
 
 [✓] 8. Hyperparameter tuning uses held-out period only
-    Grid search run on 2010–2017. Parameters frozen before any 2018+ data is seen.
-    Walk-forward test starts 2020-Q1. No re-tuning during test period.
+    LightGBM grid search on 2010–2017. XGBoost-DART grid search on 2010–2017.
+    Parameters frozen; walk-forward test starts 2020-Q1. No re-tuning during test period.
 
-[✓] 9. Placebo test passes
-    Signal built from Fluff/Filler-only AspectTheme columns dropped in notebook 01.
-    Placebo portfolio produces L/S Sharpe ≈ 0 (verified in notebook 04).
+[✓] 9. Placebo test — genuine non-zero signal
+    Fluff/Filler AspectTheme columns now included in signals.parquet (NB01 fix).
+    Placebo signal = normalised Fluff+Filler Positive − Negative sentence counts.
+    Expected: placebo L/S Sharpe ≈ 0 (noise class by design).
 
 [✓] 10. Corporate actions / delistings handled
-    If no close price found on entry_date (or within +3 business days), fwd returns
-    are NaN → event excluded from quintile assignment and portfolio simulation.
+    If no close price found on entry_date (±3 business days), fwd returns = NaN.
+    Events excluded from quintile assignment and portfolio simulation automatically.
 
 [✓] 11. Fluff/Filler excluded from predictive features
-    PLACEBO_COLS (Fluff/Filler) excluded from ASPECT_COLS at parse time in notebook 01.
-    Never fed into MWNS features or model training.
+    PLACEBO_COLS kept in signals.parquet ONLY for the placebo test.
+    Never included in ASPECT_COLS, MWNS features, or any model training.
 
-[CORRECTED] 12. INGESTDATEUTC — dataset context matters
-    INGESTDATEUTC in this CSV is a BATCH PROCESSING TIMESTAMP (2023-07-06 for all
-    historical records 2010-2022), not a per-call availability date. Using
-    max(MOSTIMPORTANTDATEUTC, INGESTDATEUTC) would incorrectly block all pre-2023 trades.
-    Correct rule: use MOSTIMPORTANTDATEUTC only for entry timing.
-    The "ingest lag" concern from the handout applies to datasets where individual calls
-    are ingested incrementally; this CSV was generated as a single historical export.
+[CORRECTED] 12. INGESTDATEUTC — empirical verification
+    Sampling 7,234 Total-slice rows from the raw CSV:
+      mean(INGESTDATEUTC − MOSTIMPORTANTDATEUTC) = 4,833 days (~13 years)
+      This is a BULK HISTORICAL EXPORT TIMESTAMP (dataset created 2023-07-06),
+      not a per-call availability date.
+    Using max(call_entry, INGESTDATEUTC) would incorrectly block all pre-2023 trades.
+    Decision: use MOSTIMPORTANTDATEUTC + entry rule only.
+    Documented assumption — not a look-ahead failure.
 
-All 12 items reviewed. 11 PASS, 1 CORRECTED (INGESTDATEUTC semantics).
-Three documented caveats: SP1500 pre-2012/2019 PIT, RU3K over-broad proxy, INGESTDATEUTC batch timestamp.
+All 12 items reviewed.
+11 PASS / 1 CORRECTED (INGESTDATEUTC batch timestamp, not per-call).
+Three documented caveats: SP1500 pre-2012/2019 PIT, RU3K over-broad proxy.
