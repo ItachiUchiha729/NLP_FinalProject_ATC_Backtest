@@ -2,18 +2,21 @@
 run_all.py — One-command reproduction of the ATC backtest pipeline.
 
 Usage:
-    python run_all.py                   # run everything (fetches WRDS data on first run)
+    python run_all.py                   # run everything
     python run_all.py --from 03         # resume from notebook 03
     python run_all.py --only 04 07      # run specific notebooks only
-    python run_all.py --skip-wrds       # skip the WRDS fetch check (use cached data)
     ATC_PROJECT_ROOT=/path/to/project python run_all.py
 
-Step 0 (automatic): if WRDS universe cache files are missing, runs
-    fetch_wrds_universe.py interactively — you will be prompted for
-    your WRDS credentials ONCE. They are saved to ~/.pgpass so all
-    subsequent runs are fully non-interactive.
+Prerequisites:
+    1. Place Earnings_ATC_until_2026-04-21.csv in the project root
+    2. pip install pandas pyarrow yfinance lightgbm xgboost scikit-learn
+              scipy seaborn matplotlib exchange_calendars lxml nbformat
 
-Steps 1-8: all notebooks are executed via jupyter nbconvert (non-interactive).
+NOTE: WRDS universe data is already cached in data/universe/*.parquet
+      (committed to the repo). No WRDS credentials needed to reproduce results.
+      If you want to re-fetch from WRDS, run: notebooks/fetch_wrds.ipynb
+
+Steps 1-10: all notebooks executed via jupyter nbconvert (non-interactive).
 """
 import subprocess, sys, argparse, time
 from pathlib import Path
@@ -24,13 +27,15 @@ UNIV_DIR = PROJECT / 'data' / 'universe'
 
 NOTEBOOKS = [
     ('01', '01_data_pipeline.ipynb',        600,  'CSV → Parquet cache (600 cols incl. Fluff/Filler)'),
-    ('02', '02_universe_and_prices.ipynb', 7200,  'WRDS PIT universe + yfinance prices + fwd returns'),
-    ('03', '03_feature_engineering.ipynb', 1800,  'Feature engineering (MWNS, QoQ, sector rank)'),
+    ('02', '02_universe_and_prices.ipynb', 7200,  'WRDS PIT universe (cached) + yfinance prices + fwd returns'),
+    ('03', '03_feature_engineering.ipynb', 1800,  'Feature engineering (MWNS×45, QoQ, sector rank)'),
     ('04', '04_backtest_baseline.ipynb',   1800,  'Baseline IC + quintile backtest + placebo test'),
-    ('05', '05_walkforward_model.ipynb',   3600,  'Walk-forward LightGBM'),
+    ('05', '05_walkforward_model.ipynb',   3600,  'Walk-forward LightGBM (original)'),
     ('06', '06_portfolio_robustness.ipynb',1800,  'Portfolio simulation + robustness checks'),
     ('07', '07_horizon_sensitivity.ipynb', 1800,  'Horizon sensitivity (matched Weekly+5d / Monthly+20d)'),
     ('08', '08_regime_aware_model.ipynb',  3600,  'Regime-aware XGBoost-DART'),
+    ('09', '09_improved_lgbm.ipynb',       1800,  'Improved LightGBM (rolling window + rank target)'),
+    ('10', '10_improved_xgb.ipynb',        1800,  'Improved XGBoost-DART (rolling window + rank target)'),
 ]
 
 PYTHON = sys.executable
@@ -102,13 +107,17 @@ def main():
     print(f'ATC Backtest Pipeline')
     print(f'Project root : {PROJECT}')
 
-    # ── Step 0: WRDS universe data (one-time, interactive) ────────────────────
+    # ── Step 0: WRDS universe data ───────────────────────────────────────────
+    # The parquets in data/universe/ are committed to the repo — no WRDS
+    # credentials needed. This check is only a safety net.
     if not args.skip_wrds and not args.only:
-        # Only check when running the full pipeline (not --only specific notebooks)
         if not wrds_cache_exists():
-            fetch_wrds_data()
+            print('\nWARNING: data/universe/ parquets not found.')
+            print('Run notebooks/fetch_wrds.ipynb interactively to fetch them.')
+            print('Or clone the repo fresh — they are committed to git.\n')
+            sys.exit(1)
         else:
-            print('\n✓ WRDS universe cache found — skipping fetch.')
+            print('\n✓ WRDS universe cache found (committed to repo) — no credentials needed.')
 
     # ── Steps 1-8: Notebooks (non-interactive via nbconvert) ──────────────────
     to_run = NOTEBOOKS

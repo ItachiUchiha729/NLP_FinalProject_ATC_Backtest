@@ -7,31 +7,35 @@
 
 ---
 
-## Quick Start
+## Quick Start — Two Steps to Reproduce
 
 ```bash
 # 1. Place Earnings_ATC_until_2026-04-21.csv in the project root
+#    (provided by the course — the only file you need to supply)
 
 # 2. Install dependencies (Python 3.11):
 pip install pandas pyarrow yfinance lightgbm xgboost scikit-learn \
-            scipy seaborn matplotlib exchange_calendars wrds lxml nbformat
+            scipy seaborn matplotlib exchange_calendars lxml nbformat
 
-# 3. Fetch WRDS universe data (one-time, requires institutional WRDS access):
-#    Open notebooks/fetch_wrds.ipynb in VS Code and run interactively
-#    (prompts for WRDS username + password in cell output)
-
-# 4. Run the full pipeline:
+# 3. Run everything:
 python run_all.py
+```
 
-# Options:
+**No WRDS credentials required.** The universe membership parquets
+(`data/universe/sp_constituents_wrds.parquet`, `ru3k_constituents_crsp.parquet`)
+are already committed to this repo. `run_all.py` detects them and skips any
+WRDS fetch automatically.
+
+```bash
+# Other options:
 python run_all.py --from 03         # resume from notebook 03
 python run_all.py --only 04 07      # run specific notebooks
 ATC_PROJECT_ROOT=/path/to/project python run_all.py
 ```
 
-> **Large files not committed:** `signals.parquet`, `features.parquet`,
-> `model_predictions.parquet`, and per-ticker price cache are generated
-> by `run_all.py`. Only figures, CSVs, JSONs, and notebooks are in the repo.
+> **Files generated (not committed — too large):** `signals.parquet`,
+> `features.parquet`, `model_predictions.parquet`, per-ticker price cache.
+> All are rebuilt from scratch by `run_all.py` using the raw CSV.
 
 ---
 
